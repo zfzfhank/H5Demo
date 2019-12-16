@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">小蜜蜂商戶通</string>
+    <string name="permission_denied">請打開文件讀取權限後重試</string>
+    <string name="exit_tips">再按壹下退出應用</string>
+    <string name="refuse_permission">部分權限請求失敗,可能會影響程序使用</string>
+</resources>
