@@ -13,29 +13,17 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings.Secure.getString
 import android.util.Log
-import android.view.KeyEvent
-import android.view.Menu
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.tbruyelle.rxpermissions2.RxPermissions
 import java.io.File
-import java.util.logging.Logger
-import android.R.menu
-import android.content.SharedPreferences
-import android.view.MenuInflater
-import androidx.core.app.ComponentActivity
-import androidx.core.app.ComponentActivity.ExtraData
-import androidx.core.content.ContextCompat.getSystemService
-import android.icu.lang.UCharacter.GraphemeClusterBreak.T
-import android.os.Build
 import android.text.TextUtils
-import android.view.MenuItem
+import android.view.*
 import com.qtopay.litemall.CaptureActivity
 
 
 class MainActivity : AppCompatActivity() {
     var myWebChromeClient: MyWebChromeClient? = null
-    public val REQUEST_FILE_PICKER = 1
     var exitTime: Long = 0
     //http://192.168.2.248/merchant-app/#/login
     //http://192.168.36.236:8090/#/product/list
@@ -43,9 +31,20 @@ class MainActivity : AppCompatActivity() {
     //https://dc.xmfstore.com/merchant-app/#/product/list
     var url = "http://192.168.36.236:8090/#/home"
 
+    var errUrl: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        CookieManager.getInstance().removeSessionCookies(null)
+        webview_main.clearCache(true)
+        webview_main.clearHistory()
+
+        text_err_tips.setOnClickListener {
+            text_err_tips.visibility = View.GONE
+            webview_main.visibility = View.VISIBLE
+            webview_main.loadUrl(errUrl)
+        }
         webview_main.settings.apply {
             domStorageEnabled = true
             javaScriptEnabled = true
@@ -62,6 +61,17 @@ class MainActivity : AppCompatActivity() {
         myWebChromeClient = MyWebChromeClient(this)
         webview_main.webChromeClient = myWebChromeClient!!
         webview_main.webViewClient = object : WebViewClient() {
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                errorResponse: WebResourceResponse?
+            ) {
+                errUrl = request!!.url.toString()
+                view!!.loadUrl("about:blank")
+                webview_main.visibility = View.GONE
+                text_err_tips.visibility = View.VISIBLE
+                super.onReceivedHttpError(view, request, errorResponse)
+            }
 
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
@@ -82,15 +92,12 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
                 saveCookie(request.url.toString())
-                CookieManager.getInstance().flush()
-                webview_main.loadUrl(request.url.toString())
-                return true
+//                webview_main.loadUrl(request!!.url.toString())
+                return false
             }
         }
         var disp = RxPermissions(this).request(
-            Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.CAMERA,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE,
             Manifest.permission.READ_EXTERNAL_STORAGE
         )
             .subscribe({ aBoolean ->
@@ -100,7 +107,7 @@ class MainActivity : AppCompatActivity() {
             }) { error ->
                 Log.d("err", "error:" + error.message!!)
             }
-
+        setCookies(url)
         webview_main.loadUrl(url)
     }
 
@@ -135,7 +142,7 @@ class MainActivity : AppCompatActivity() {
             mFilePathCallbacks = filePathCallback
             val intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
-            intent.type = "image/bmp"
+            intent.type = "image/*"
             context.startActivityForResult(
                 Intent.createChooser(intent, "File Chooser"),
                 1
@@ -206,13 +213,9 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
-    override fun onDestroy() {
-        if (webview_main != null)
-            saveCookie(webview_main.url)
-        super.onDestroy()
-    }
-
     fun setCookies(url: String) {
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().removeSessionCookies(null)
         var cookieMap: Map<String, String> = HashMap()
         var cookie = getSharedPreferences("cookie", Context.MODE_PRIVATE).getString(
             "cookies",
@@ -226,7 +229,7 @@ class MainActivity : AppCompatActivity() {
                     var cookieName = keyValuesArray[0]
                     var cookieValue = keyValuesArray[1]
                     var value = cookieName + "=" + cookieValue
-                    Log.i("cookie", value)
+                    Log.i("cookie", value + "domain " + getDomain(url))
                     CookieManager.getInstance().setCookie(
                         getDomain(url),
                         value
@@ -239,6 +242,7 @@ class MainActivity : AppCompatActivity() {
     fun saveCookie(url: String) {
         var cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(webview_main, true)
         var cookieStr = cookieManager.getCookie(url)
         var preferences = getSharedPreferences("cookie", Context.MODE_PRIVATE)
         var editor = preferences.edit()
